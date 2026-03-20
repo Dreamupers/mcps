@@ -229,8 +229,8 @@ class MarkdownToFeishuConverter:
 
     def _process_table(self, tokens: List[Token], start: int) -> int:
         i = start + 1
-        headers: List[str] = []
-        rows: List[List[str]] = []
+        headers: List[List[Dict[str, Any]]] = []  # 每个 header 是 textStyles 列表
+        rows: List[List[List[Dict[str, Any]]]] = []  # 每行每格是 textStyles 列表
 
         while i < len(tokens):
             token = tokens[i]
@@ -241,7 +241,11 @@ class MarkdownToFeishuConverter:
                 i += 2  # thead_open, tr_open
                 while i < len(tokens) and tokens[i].type != "tr_close":
                     if tokens[i].type == "th_open":
-                        headers.append(self._extract_inline_text(tokens[i + 1]))
+                        text_styles = self._extract_inline_styles(tokens[i + 1])
+                        # 表头加粗：合并 bold 到每个 style
+                        for s in text_styles:
+                            s["style"] = {**(s.get("style") or {}), "bold": True}
+                        headers.append(text_styles)
                         i += 3
                     else:
                         i += 1
@@ -251,11 +255,12 @@ class MarkdownToFeishuConverter:
                 i += 1
                 while i < len(tokens) and tokens[i].type != "tbody_close":
                     if tokens[i].type == "tr_open":
-                        row: List[str] = []
+                        row: List[List[Dict[str, Any]]] = []
                         i += 1
                         while i < len(tokens) and tokens[i].type != "tr_close":
                             if tokens[i].type == "td_open":
-                                row.append(self._extract_inline_text(tokens[i + 1]))
+                                text_styles = self._extract_inline_styles(tokens[i + 1])
+                                row.append(text_styles)
                                 i += 3
                             else:
                                 i += 1
@@ -277,22 +282,22 @@ class MarkdownToFeishuConverter:
         }
         cells = table_block["options"]["table"]["cells"]
 
-        for ci, ht in enumerate(headers):
+        for ci, text_styles in enumerate(headers):
             cells.append({
                 "coordinate": {"row": 0, "column": ci},
                 "content": {
                     "blockType": "text",
-                    "options": {"text": {"textStyles": [{"text": ht, "style": {"bold": True}}], "align": 1}},
+                    "options": {"text": {"textStyles": text_styles, "align": 1}},
                 },
             })
 
         for ri, rd in enumerate(rows):
-            for ci, ct in enumerate(rd):
+            for ci, text_styles in enumerate(rd):
                 cells.append({
                     "coordinate": {"row": ri + 1, "column": ci},
                     "content": {
                         "blockType": "text",
-                        "options": {"text": {"textStyles": [{"text": ct, "style": {}}], "align": 1}},
+                        "options": {"text": {"textStyles": text_styles, "align": 1}},
                     },
                 })
 
